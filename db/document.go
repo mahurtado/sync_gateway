@@ -58,6 +58,7 @@ type syncData struct {
 	Cas             string              `json:"cas"`                     // String representation of a cas value, populated via macro expansion
 	Crc32c          string              `json:"value_crc32c"`            // String representation of crc32c hash of doc body, populated via macro expansion
 	TombstonedAt    int64               `json:"tombstoned_at,omitempty"` // Time the document was tombstoned.  Used for view compaction
+	Attachments     AttachmentMap       `json:"attachments,omitempty"`
 
 	// Fields used by bucket-shadowing:
 	UpstreamCAS *uint64 `json:"upstream_cas,omitempty"` // CAS value of remote doc
@@ -696,6 +697,7 @@ func (doc *document) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return pkgerrors.WithStack(base.RedactErrorf("Failed to UnmarshalJSON() doc with id: %s.  Error: %v", base.UD(doc.ID), err))
 	}
+
 	if root.SyncData != nil {
 		doc.syncData = *root.SyncData
 	}
@@ -714,8 +716,10 @@ func (doc *document) MarshalJSON() ([]byte, error) {
 		body = Body{}
 	}
 	body["_sync"] = &doc.syncData
+	// body["_attachments"] = &doc.syncData.Attachments
 	data, err := json.Marshal(body)
 	delete(body, "_sync")
+	// delete(body, "_attachments")
 	if err != nil {
 		err = pkgerrors.WithStack(base.RedactErrorf("Failed to MarshalJSON() doc with id: %s.  Error: %v", base.UD(doc.ID), err))
 	}
@@ -760,7 +764,7 @@ func (doc *document) UnmarshalWithXattr(data []byte, xdata []byte, unmarshalLeve
 		var revOnlyMeta revOnlySyncData
 		unmarshalErr := json.Unmarshal(xdata, &revOnlyMeta)
 		if unmarshalErr != nil {
-			return pkgerrors.WithStack(base.RedactErrorf( "Failed to UnmarshalWithXattr() doc with id: %s (DocUnmarshalRev).  Error: %v", base.UD(doc.ID), unmarshalErr))
+			return pkgerrors.WithStack(base.RedactErrorf("Failed to UnmarshalWithXattr() doc with id: %s (DocUnmarshalRev).  Error: %v", base.UD(doc.ID), unmarshalErr))
 		}
 		doc.syncData = syncData{
 			CurrentRev: revOnlyMeta.CurrentRev,

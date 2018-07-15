@@ -104,7 +104,7 @@ func (db *DatabaseContext) GetDocSyncData(docid string) (syncData, error) {
 	emptySyncData := syncData{}
 	key := realDocID(docid)
 	if key == "" {
-		return syncData{}, base.HTTPErrorf(400, "Invalid doc ID")
+		return emptySyncData, base.HTTPErrorf(400, "Invalid doc ID")
 	}
 
 	if db.UseXattrs() {
@@ -244,6 +244,7 @@ func (db *Database) GetRevWithHistory(docid, revid string, maxHistory int, histo
 	if revIDGiven {
 		// Get a specific revision body and history from the revision cache
 		// (which will load them if necessary, by calling revCacheLoader, above)
+		// here
 		body, revisions, inChannels, err = db.revisionCache.Get(docid, revid)
 	} else {
 		// No rev ID given, so load active revision
@@ -307,6 +308,17 @@ func (db *Database) GetRevWithHistory(docid, revid string, maxHistory int, histo
 		if doc.Expiry != nil && !doc.Expiry.IsZero() {
 			body["_exp"] = doc.Expiry.Format(time.RFC3339)
 		}
+	}
+
+	// TODO: Now we always have to GetDocument sync? Is it too much overhead on reads? We can't rely on rev cache
+	if doc == nil {
+		if doc, err = db.GetDocument(docid, DocUnmarshalSync); doc == nil {
+			return nil, err
+		}
+	}
+
+	if doc.Attachments != nil {
+		body["_attachments"] = doc.Attachments
 	}
 
 	// Add attachment bodies:
@@ -410,6 +422,11 @@ func (db *DatabaseContext) getRevision(doc *document, revid string) (Body, error
 	body.FixJSONNumbers() // Make sure big ints won't get output in scientific notation
 	body["_id"] = doc.ID
 	body["_rev"] = revid
+
+	if doc.Attachments != nil {
+		body["_attachments"] = doc.Attachments
+	}
+
 	return body, nil
 }
 
@@ -615,7 +632,7 @@ func (db *Database) Put(docid string, body Body) (newRevID string, err error) {
 			return nil, nil, nil, base.HTTPErrorf(http.StatusConflict, "Document revision conflict")
 		}
 
-		// Process the attachments, replacing bodies with digests. This alters 'body' so it has to
+		// Process the attachments, and populate _sync with metadata. This alters 'body' so it has to
 		// be done before calling createRevID (the ID is based on the digest of the body.)
 		newAttachments, err := db.storeAttachments(doc, body, generation, matchRev, nil)
 		if err != nil {
@@ -629,6 +646,14 @@ func (db *Database) Put(docid string, body Body) (newRevID string, err error) {
 			base.Infof(base.KeyCRUD, "Failed to add revision ID: %s, error: %v", newRev, err)
 			return nil, nil, nil, base.ErrRevTreeAddRevFailure
 		}
+
+		// move _attachment metadata to syncdata of doc after rev-id generation
+		attachmentMap := AttachmentMap{}
+		for name, attachment := range BodyAttachments(body) {
+			attachmentMap[name] = attachment
+		}
+		doc.syncData.Attachments = attachmentMap
+		delete(body, "_attachments")
 
 		return body, newAttachments, nil, nil
 	})
@@ -706,7 +731,7 @@ func (db *Database) PutExistingRev(docid string, body Body, docHistory []string,
 			parent = docHistory[i]
 		}
 
-		// Process the attachments, replacing bodies with digests.
+		// Process the attachments, and populate _sync with metadata.
 		parentRevID := doc.History[newRev].Parent
 		newAttachments, err := db.storeAttachments(doc, body, generation, parentRevID, docHistory)
 		if err != nil {

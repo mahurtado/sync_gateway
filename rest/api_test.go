@@ -3266,7 +3266,10 @@ func TestBulkGetBadAttachmentReproIssue2528(t *testing.T) {
 	*/
 
 	// Modify the doc directly in the bucket to delete the digest field
-	attachments := db.BodyAttachments(couchbaseDoc)
+	s := couchbaseDoc["_sync"].(map[string]interface{})
+	couchbaseDoc["_attachments"] = s["attachments"].(map[string]interface{})
+	attachments := couchbaseDoc["_attachments"].(map[string]interface{})
+
 	attach1 := attachments[attachmentName].(map[string]interface{})
 	delete(attach1, "digest")
 	delete(attach1, "content_type")
