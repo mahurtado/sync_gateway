@@ -3197,6 +3197,12 @@ func TestBulkGetRevPruning(t *testing.T) {
 // Reproduces panic seen in https://github.com/couchbase/sync_gateway/issues/2528
 func TestBulkGetBadAttachmentReproIssue2528(t *testing.T) {
 
+	if base.TestUseXattrs() {
+		// Since we now store attachment metadata in sync data,
+		// this test cannot modify the xattrs to reproduce the panic
+		t.Skip("This test only works with XATTRS disabled")
+	}
+
 	var rt RestTester
 	defer rt.Close()
 
