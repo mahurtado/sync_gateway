@@ -6,7 +6,7 @@
 # [![Sync Gateway](docs/sg-header.png)][SG_REPO]
 
 Sync Gateway is a horizontally scalable web server that securely manages the access control and
-synchronization of data between the [Couchbase Lite][CB_LITE] and [Couchbase Server][CB_SERVER].
+synchronization of data between [Couchbase Lite][CB_LITE] and [Couchbase Server][CB_SERVER].
 
 ## Resources
 
